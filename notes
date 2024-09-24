@@ -1,0 +1,24 @@
+
+
+_start:
+call sysinfo
+{
+push rbp
+pop rbp
+ret
+}
+
+{
+call IntToStr
+push rbp
+
+  {
+  call memset
+  ret
+  }
+
+pop rbp
+ret
+}
+
+exit

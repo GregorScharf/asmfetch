@@ -1,0 +1,21 @@
+possible:
+memory \ sysinfo
+kernel \ utsname
+os \ utsname
+uptime \ sysinfo 
+
+possible but have to find out:
+cpu 
+gpu
+
+maybe:
+resolution
+shell
+
+no:
+packages
+DE, WM, 
+Themes, icon
+
+char* (*(*foo[5])(char*))[];
+foo[2][1][3]("hello")[21];
