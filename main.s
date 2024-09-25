@@ -12,31 +12,12 @@ usedmem:
 path:
   .asciz "/proc/meminfo"
 
-  # TODO: write a string to unsigned int function
-
 _start:
   call sysinfo
 
   mov rax, 60
   mov rdi, 0
   syscall
-
-empty:
-  push rbp
-  pop rbp
-  ret
-
-memset:
-  mov rdx, rax
-  add rdx, rsi
-  mov byte [rdx], rdi
-
-  sub rsi, 1 # decrement the counter 
-  cmp rsi, 0 # if not 0 
-  jne memset # repeat
-
-  # return
-  ret
 
 # rdi is an unsigned long as the argument
 # rax contains 
@@ -59,20 +40,9 @@ its:
   mov QWORD PTR [rbp-16], rax
   mov r10, rax
 
-  mov rdi, 0
-  mov rsi, BUFSIZE
-  sub rsi, 1
-  call memset
-
   mov rbx, BUFSIZE # i = BUFSIZE -1
 
   jmp L1
-
-  # loop
-  mov rax, r10
-  add rsp, 24
-  pop rbp
-  ret
 
 L1:
   xor rax, rax
@@ -91,12 +61,91 @@ L1:
   mov QWORD PTR [rbp-8], rax  # x /= 10
  
   cmp rax, 0
-  je its+102
+  je leave_its
 
   cmp rbx, 0
   jne L1
 
-  jmp its+102 #magic value determined by testing and changing until it works
+  jmp leave_its
+
+leave_its:
+  mov rax, r10
+  add rsp, 24
+  pop rbp
+  ret
+
+
+# rdi is the char* argument
+strlen:
+  push rbp
+  mov rbp, rsp
+  sub rsp, 8
+  mov QWORD PTR[rbp -8], 0 # long n = 0
+  jmp L2
+  
+
+L2:
+  mov rsi, rdi
+  add rsi, QWORD PTR[rbp-8]
+  mov dl, byte[rsi]
+  cmp dl, 0
+  jne L3
+
+  jmp leave_strlen
+
+leave_strlen:
+  mov rax, QWORD PTR [rbp-8]
+  add rax, 1
+  add rsp, 8
+  pop rbp
+  ret
+L3:
+  add QWORD PTR[rbp-8], 1
+  jmp L2
+
+# rdi is the char* argument
+sti:
+  push rbp
+  mov rbp, rsp
+  sub rsp, 40 # 40 + 8 from rbp, 8 bytes wasted
+  call strlen
+  sub rax, 1
+  mov QWORD PTR [rbp - 8], rax
+  mov QWORD PTR [rbp - 16], 0
+  mov QWORD PTR [rbp - 24], 0
+  mov QWORD PTR [rbp - 32], 0
+  mov QWORD PTR [rbp - 40], rdi #save pointer to stack
+  jmp L4
+
+L4:
+  cmp QWORD PTR [rbp-32], rax
+  jle L5
+
+  mov QWORD PTR [rbp-32], rax # i = length of str - 1
+  # TODO: finsish logic for str to int conversion !here
+  jmp cont_sti
+
+L5:
+  mov rsi, rdi
+  add rsi, QWORD PTR[rbp-32] # str[i]
+  mov dl, byte [rsi]
+  cmp dl, 47
+  jle error
+
+  cmp dl, 58
+  jae error
+
+  add QWORD PTR[rbp-32], 1
+  jmp L4
+
+cont_sti:
+  
+
+error:
+  mov rax, 60
+  mov rdi, -1
+  syscall
+
 
 sysinfo:
   push rbp
@@ -120,11 +169,8 @@ sysinfo:
   mov rax, [rdi] # total memory
   add rdi, 8
   mov rsi, [rdi] # free memory
-  add rdi, 24
-  mov rdx, [rdi] # total swap memory
 
   sub rax, rsi
-  sub rax, rdx
 
   xor rdx, rdx
   mov rsi, 1024
@@ -176,11 +222,13 @@ sysinfo:
   mov rdi, [rsi]
   call its
 
+
   mov rsi, rax
   mov rax, 1
   mov rdi, 1
   mov rdx, BUFSIZE+2
   syscall 
+
   mov rax, 1
   mov rdi, 1
   lea rsi, newline
@@ -207,7 +255,7 @@ sysinfo:
   mov rdi, rax
   mov rax, 0
   mov rsi, QWORD PTR [rbp-120]
-  mov rdx, 142
+  mov rdx, 136
   syscall
 
   add QWORD PTR[rbp-120], 129
@@ -215,8 +263,11 @@ sysinfo:
   mov rax, 1
   mov rdi, 1
   mov rsi, QWORD PTR[rbp-120]
-  mov rdx, 255
+  mov rdx, 250
   syscall
+
+  mov rdi, rsi
+  call strlen
 
   add rsp, 128
   pop rbp
