@@ -10,9 +10,39 @@ newline:
 slash:
   .asciz " / "
 usedmem:
-  .asciz "Used memory : "
+  .asciz "Memory: "
 path:
   .asciz "/proc/meminfo"
+MiB:
+  .asciz " MiB"
+
+
+# rdi as argument pointer
+print:
+  push rbp 
+  mov rbp, rsp
+  sub rsp, 24
+  mov QWORD PTR[rbp-24], rax
+  mov QWORD PTR[rbp-16], rsi
+  mov QWORD PTR[rbp-8], rdx
+
+  call strlen
+  mov rdx, rax
+  add rdx, 1
+
+  mov rax, 1 
+  mov rsi, rdi
+  mov rdi, 1
+  syscall
+
+  mov rax, QWORD PTR[rbp-24]
+  mov rsi, QWORD PTR[rbp-16]
+  mov rdx, QWORD PTR[rbp-8]
+
+  add rsp, 24
+  pop rbp
+  ret
+
 
 # rdi is the base
 # rsi is the exponent
@@ -90,7 +120,7 @@ itsL1:
   mov rax, QWORD PTR [rbp - 8] #
   mov rcx, 10                  #
   div rcx                      #
-  add rdx, 48                  #
+  add dl, 48                   #
 
 
   mov rdi, r10                 # str[i] = result from the above
@@ -99,20 +129,32 @@ itsL1:
   sub rbx, 1                   # i--
 
   mov QWORD PTR [rbp-8], rax  # x /= 10
- 
   cmp rax, 0
-  je leave_its
+  je its_fixoffset
 
   cmp rbx, 0
   jne itsL1
 
-  jmp leave_its
+  jmp its_fixoffset
 
 leave_its:
   mov rax, r10
   add rsp, 24
   pop rbp
   ret
+
+its_fixoffset:
+  xor rdx, rdx
+  mov dl, byte[r10]
+  cmp dl, 0
+  je its_fixoffsetL1
+
+  add r10, 1
+  jmp leave_its
+
+its_fixoffsetL1:
+  add r10, 1
+  jmp its_fixoffset
 
 
 # rdi is the char* argument
@@ -163,7 +205,8 @@ sti:
 stiL1:
   cmp QWORD PTR [rbp-32], rax
   jle stiL2
-
+  
+  mov QWORD PTR [rbp-24], 0
   mov QWORD PTR [rbp-32], rax # i = length of str - 1
   add QWORD PTR [rbp-32], BITHACK
   jmp cont_sti
@@ -224,133 +267,138 @@ error:
   mov rdi, -1
   syscall
 
-
-sysinfo:
+get_cached:
   push rbp
   mov rbp, rsp
+  sub rsp, 16
 
-  mov rax, 1
-  mov rdi, 1
-  lea rsi, usedmem
-  mov rdx, 15
-  syscall
-
-
-  sub rsp, 128 # allocate for info struct
-  # call sysinfo 
-  mov rax, 99
-  mov rdi, rbp
-  sub rdi, 128
-  syscall
-
-  add rdi, 32
-  mov rax, [rdi] # total memory
-  add rdi, 8
-  mov rsi, [rdi] # free memory
-
-  sub rax, rsi
-  mov QWORD PTR[rbp-128], rax
- #########################################################
-  mov rsi, 256
   mov rax, 9
   mov rdi, 0
+  mov rsi, 256
   mov rdx, 3
   mov r10, 34
   mov r8, -1
   mov r9, 0
   syscall
-  mov QWORD PTR[rbp - 120], rax
 
-  mov rax, 2
+  mov QWORD PTR [rbp-8], rax
+  mov QWORD PTR [rbp-16], rax # wont get modified, used to free at the end TODO!
+ 
+  mov rax, 2 # open /proc/meminfo
   lea rdi, path
   mov rsi, 0
   mov rdx, 0777
-  syscall
+  syscall # rax now contains the file descriptor
 
   mov rdi, rax
   mov rax, 0
-  mov rsi, QWORD PTR [rbp-120]
+  mov rsi, QWORD PTR[rbp-8]
   mov rdx, 136
   syscall
 
-  add QWORD PTR[rbp-120], 129
+  add QWORD PTR[rbp-8], 120
 
-  mov rdi, QWORD PTR[rbp-120]
+  mov rsi, QWORD PTR[rbp-8]
+  add rsi, 16
+  mov QWORD PTR [rsi], 0
 
+  jmp get_cachedL1
+
+ get_cachedL1:
+  xor rdx, rdx
+  mov rsi, QWORD PTR[rbp-8]
+  mov dl, byte[rsi]
+  cmp dl, 32
+  je get_cachedL2
+
+  jmp get_cached_cont1
+
+get_cachedL2:
+  xor rdx, rdx
+
+  mov dl, 0
+  mov byte [rsi], dl
+
+  add QWORD PTR[rbp-8], 1
+  jmp get_cachedL1
+
+get_cached_cont1:
+
+  mov rdi, QWORD PTR[rbp-8]
+  add rdi, 1
   call sti
 
-  xor rdx, rdx
-  mov rbx, 1000
-  mul rbx
-########################################################
+  mov rdx, 1000
+  mul rdx
 
-  mov rsi, rax
-  mov rax, QWORD PTR[rbp-128]
+  add rsp, 16
+  pop rbp
+  ret
+
+
+
+sysinfo:
+  push rbp
+  mov rbp, rsp
+
+  lea rdi, usedmem
+  call print
+
+  sub rsp, 128 # allocate for info struct
+
+  # call sysinfo 
+  mov rax, 99
+  mov rdi, rbp
+  sub rdi, 112
+  syscall
+
+  add rdi, 32
+  mov rax, [rdi] # total memory
+  mov QWORD PTR[rbp-120], rax
+
+  add rdi, 8
+  mov rsi, [rdi] # free memory
   sub rax, rsi
 
+  mov QWORD PTR[rbp-128], rax
+  call get_cached # rdi has a char* to that memory, rax holds the byte value
+  sub QWORD PTR [rbp-128], rax
+
+  mov rax, QWORD PTR[rbp-128]
   xor rdx, rdx
-  mov rsi, 1024
-  div rsi
-  div rsi
+  mov rbx, 1024
+  div rbx
+  xor rdx, rdx
+  div rbx
 
   mov rdi, rax
   call its
-  
-  mov rsi, rax
-  mov rax, 1
-  mov rdi, 1
-  mov rdx, BUFSIZE+2
-  syscall
 
-  mov rax, 1
-  mov rdi, 1
-  lea rsi, slash
-  mov rdx, 3
-  syscall
-
-  mov rsi, rbp
-  sub rsi, 128
-  add rsi, 32
-  mov rax, [rsi]
-  xor rdx, rdx
-  mov rsi, 1024
-  div rsi
-  div rsi
   mov rdi, rax
+  call print
 
+  lea rdi, MiB
+  call print
+
+  lea rdi, slash
+  call print
+
+  mov rax, QWORD PTR[rbp-120]
+  mov rbx, 1024
+  xor rdx, rdx
+  div rbx
+  xor rdx, rdx
+  div rbx
+
+  mov rdi, rax
   call its
 
-  mov rsi, rax
-  mov rax, 1
-  mov rdi, 1
-  mov rdx, BUFSIZE + 2
-  syscall
+  mov rdi, rax
+  call print
 
-  mov rax, 1
-  mov rdi, 1
-  lea rsi, newline
-  mov rdx, 1
-  syscall
-
-  mov rsi, rbp
-  sub rsi, 128
+  lea rdi, MiB
+  call print
   
-  mov rdi, [rsi]
-  call its
-
-
-  mov rsi, rax
-  mov rax, 1
-  mov rdi, 1
-  mov rdx, BUFSIZE+2
-  syscall 
-
-  mov rax, 1
-  mov rdi, 1
-  lea rsi, newline
-  mov rdx, 1
-  syscall
-
   add rsp, 128
   pop rbp
   ret

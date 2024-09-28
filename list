@@ -1,6 +1,6 @@
 possible:
-memory \ sysinfo
-kernel \ utsname
+memory \ sysinfo ###### done #####
+kernel \ utsname 
 os \ utsname
 uptime \ sysinfo 
 
