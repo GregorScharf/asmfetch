@@ -45,7 +45,22 @@ unsigned long strToInt(const char *str) {
 }
 
 int main() {
+  struct utsname name;
+  uname(&name);
 
-  printf("%lu \n", sizeof(struct sysinfo));
+  printf("%s \n%s \n%s \n%s \n%s \n", name.sysname, name.nodename, name.release,
+         name.version, name.machine);
+
+  int fd = open("/proc/cpuinfo", O_RDONLY, 0777);
+  char buf[256];
+  read(fd, buf, 256);
+
+  for (int i = 0; i < 256; i++) {
+    printf("%d ", buf[i]);
+    if (buf[i] == '\n') {
+      printf("\n");
+    }
+  }
+
   return 0;
 }

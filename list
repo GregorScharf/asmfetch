@@ -1,8 +1,8 @@
 possible:
 memory \ sysinfo ###### done #####
-kernel \ utsname 
-os \ utsname
-uptime \ sysinfo 
+kernel \ utsname ###### done #####
+os \ utsname     ###### done #####
+uptime \ sysinfo ###### done #####
 
 possible but have to find out:
 cpu 

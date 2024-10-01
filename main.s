@@ -1,9 +1,8 @@
 .intel_syntax noprefix
 .globl _start
 
-.equ BUFSIZE, 19
+.include "type_conversions.s"
 
-.equ BITHACK, 10000
 
 newline:
   .asciz "\n"
@@ -13,255 +12,222 @@ usedmem:
   .asciz "Memory: "
 path:
   .asciz "/proc/meminfo"
+cpu_path:
+  .asciz "/proc/cpuinfo"
 MiB:
   .asciz " MiB"
-
-
-# rdi as argument pointer
-print:
-  push rbp 
-  mov rbp, rsp
-  sub rsp, 24
-  mov QWORD PTR[rbp-24], rax
-  mov QWORD PTR[rbp-16], rsi
-  mov QWORD PTR[rbp-8], rdx
-
-  call strlen
-  mov rdx, rax
-  add rdx, 1
-
-  mov rax, 1 
-  mov rsi, rdi
-  mov rdi, 1
-  syscall
-
-  mov rax, QWORD PTR[rbp-24]
-  mov rsi, QWORD PTR[rbp-16]
-  mov rdx, QWORD PTR[rbp-8]
-
-  add rsp, 24
-  pop rbp
-  ret
-
-
-# rdi is the base
-# rsi is the exponent
-pow:
-  push rbp
-  mov rbp, rsp
-  sub rsp, 24
-  mov QWORD PTR[rbp-8], rdi
-  mov QWORD PTR [rbp- 16], 0
-  mov QWORD PTR[rbp-24], rdx
-  mov rax, rdi
-  sub rsi, 1
-  jmp powL1
-
-powL1:
-  cmp QWORD PTR[rbp-16], rsi
-  jle powL2
-
-  jmp leave_pow
-  
-
-powL2:
-  mul QWORD PTR [rbp-8]
-  add QWORD PTR[rbp-16], 1
-
-  jmp powL1
-
-leave_pow:
-  xor rdx, rdx
-  mov rbx, 10
-  div rbx
-
-  mov rdx, QWORD PTR[rbp-24]
-  add rsi, 1
-
-  add rsp, 24
-  pop rbp
-  ret
-
+Uptime:
+  .asciz "Uptime: "
+Hours:
+  .asciz "h "
+Minutes:
+  .asciz "m "
+Kernel:
+  .asciz "Kernel: "
+OS:
+  .asciz "OS: "
+Space:
+  .asciz " "
+model_name:
+  .asciz "model name"
 
 _start:
-  call sysinfo
-
+  call getmem
+  call uptime
+  call get_kernel
+  call get_cpu
   mov rax, 60
   mov rdi, 0
   syscall
 
-# rdi is an unsigned long as the argument
-its:
+
+get_cpu:
   push rbp
   mov rbp, rsp
+  
+  sub rsp, 24
 
-  sub rsp, 24 # 24 because proper stack allignment
-  mov QWORD PTR [rbp - 8], rdi
-
-
-  mov rsi, BUFSIZE
+  
   mov rax, 9
   mov rdi, 0
+  mov rsi, 256 
   mov rdx, 3
   mov r10, 34
   mov r8, -1
   mov r9, 0
   syscall
+
+  mov QWORD PTR [rbp-8], rax
   mov QWORD PTR [rbp-16], rax
-  mov r10, rax
 
-  mov rbx, BUFSIZE # i = BUFSIZE -1
+  mov rax, 2
+  lea rdi, cpu_path
+  mov rsi, 0
+  mov rdx, 0777
+  syscall
 
-  jmp itsL1
+  mov rdi, rax
+  mov rax, 0
+  mov rsi, QWORD PTR [rbp-8]
+  mov rdx, 255
+  syscall
 
-itsL1:
-  xor rax, rax
-  xor rdx, rdx
-  mov rax, QWORD PTR [rbp - 8] #
-  mov rcx, 10                  #
-  div rcx                      #
-  add dl, 48                   #
+  mov rdi, rsi
+  lea rsi, model_name
+  call searchstr
 
+  mov rdi, QWORD PTR [rbp-8]
+  call print
 
-  mov rdi, r10                 # str[i] = result from the above
-  add rdi, rbx                 #
-  mov byte [rdi], dl           #
-  sub rbx, 1                   # i--
-
-  mov QWORD PTR [rbp-8], rax  # x /= 10
-  cmp rax, 0
-  je its_fixoffset
-
-  cmp rbx, 0
-  jne itsL1
-
-  jmp its_fixoffset
-
-leave_its:
-  mov rax, r10
   add rsp, 24
+
   pop rbp
   ret
 
-its_fixoffset:
-  xor rdx, rdx
-  mov dl, byte[r10]
-  cmp dl, 0
-  je its_fixoffsetL1
-
-  add r10, 1
-  jmp leave_its
-
-its_fixoffsetL1:
-  add r10, 1
-  jmp its_fixoffset
-
-
-# rdi is the char* argument
-strlen:
+uptime:
   push rbp
   mov rbp, rsp
-  sub rsp, 8
-  mov QWORD PTR[rbp -8], 0 # long n = 0
-  jmp strlenL1
+  sub rsp, 112
+
+  mov rax, 99
+  mov rdi, rbp
+  sub rdi, 112
+  syscall
+
+  mov rax, [rdi]
+  xor rdx, rdx
+  mov rbx, 3600
+  div rbx
   
+  mov rdi, rax
+  call its
 
-strlenL1:
-  mov rsi, rdi
-  add rsi, QWORD PTR[rbp-8]
-  mov dl, byte[rsi]
-  cmp dl, 0
-  jne strlenL2
+  lea rdi, newline
+  call print
 
-  jmp leave_strlen
+  lea rdi, Uptime
+  call print
 
-leave_strlen:
-  mov rax, QWORD PTR [rbp-8]
-  add rsp, 8
+  mov rdi, rax
+  call print
+
+  lea rdi, Hours
+  call print
+
+  mov rax, rdx
+  xor rdx, rdx
+  mov rbx, 60
+  div rbx
+  mov rdi, rax
+  call its
+
+  mov rdi, rax
+  call print
+
+  lea rdi, Minutes
+  call print
+
+  lea rdi, newline
+  call print
+
+  add rsp, 112
   pop rbp
   ret
-strlenL2:
-  add QWORD PTR[rbp-8], 1
-  jmp strlenL1
 
-# rdi is the char* argument
-sti:
+get_kernel:
   push rbp
   mov rbp, rsp
-  sub rsp, 40 # 40 + 8 from rbp, 8 bytes wasted
-  call strlen
-  sub rax, 1
+  sub rsp, 390
+ 
+  lea rdi, Kernel
+  call print
 
-  cmp rax, 17
-  jae error
+  mov rax, 63
+  mov rdi, rbp
+  sub rdi, 390
+  syscall
 
-  mov QWORD PTR [rbp - 8], rax
-  mov QWORD PTR [rbp - 16], 0 # result value = 0
-  mov QWORD PTR [rbp - 24], 0 # long expo = 0
-  mov QWORD PTR [rbp - 32], 0 # long i = 0
-  mov QWORD PTR [rbp - 40], rdi #save pointer to stack
-  jmp stiL1
-
-stiL1:
-  cmp QWORD PTR [rbp-32], rax
-  jle stiL2
-  
-  mov QWORD PTR [rbp-24], 0
-  mov QWORD PTR [rbp-32], rax # i = length of str - 1
-  add QWORD PTR [rbp-32], BITHACK
-  jmp cont_sti
-
-stiL2:
   mov rsi, rdi
-  add rsi, QWORD PTR[rbp-32] # str[i]
-  mov dl, byte [rsi]
-  cmp dl, 47
-  jle error
+  add rdi, 130
+  call print
+  sub rdi, 130
 
-  cmp dl, 58
-  jae error
+  lea rdi, newline
+  call print
 
-  add QWORD PTR[rbp-32], 1
-  jmp stiL1
+  lea rdi, OS
+  call print
 
-cont_sti:
-  cmp QWORD PTR [rbp-32], BITHACK-1 # i >= 0
-  jae stiL3
+  mov rdi, rsi
+  add rdi, 65
+  call print
+  sub rdi, 65
 
-  jmp leave_sti
+  add rdi, 195
+  call getVersion
 
-stiL3:
+  lea rdi, Space
+  call print
+
+  mov rdi, rax
+  call print
+
+  lea rdi, newline
+  call print
+
+  add rsp, 390
+  pop rbp
+  ret
+
+getVersion:
+  push rbp
+  mov rbp, rsp
+  sub rsp, 40
+  mov QWORD PTR [rbp-8], 0
+  mov QWORD PTR [rbp-16], 0
+
+  jmp getVersionL1
+
+getVersionL1:
   xor rdx, rdx
+  mov dl, byte[rdi]
+  cmp dl, 126
+  jne getVersionL2
 
-  mov rsi, QWORD PTR [rbp - 40]
-  sub QWORD PTR[rbp-32], BITHACK
-  add rsi, QWORD PTR [rbp - 32]
-  add QWORD PTR[rbp-32], BITHACK
-  mov dl, byte[rsi]
-  sub dl, 48
+  jmp getVersionL3
 
-  mov rdi, 10
-  mov rsi, QWORD PTR[rbp-24]
-  call pow
+getVersionL2:
+  add rdi, 1
+  jmp getVersionL1
 
-  mov rsi, rax
-  mov rax, rdx # (u64)dl
+getVersionL3:
+  add QWORD PTR [rbp-8], 1
+
+  add rdi, 1
+  cmp QWORD PTR [rbp-8], 2
+  jne getVersionL1
+
+  add rdi, 1
+  mov QWORD PTR [rbp-16], rdi
+  jmp getVersionL4
+
+getVersionL4:
   xor rdx, rdx
-  mul rsi
+  mov dl, byte[rdi]
+  cmp dl, 126
+  jne getVersionL5
+  
+  mov dl, 0
+  mov byte [rdi], dl
+  mov rax, QWORD PTR [rbp-16]
 
-  add QWORD PTR[rbp-16], rax
-
-  sub QWORD PTR [rbp-32], 1 # i--;
-  add QWORD PTR [rbp-24], 1 # expo++;
-
-  jmp cont_sti
-
-leave_sti:
-  mov rax, QWORD PTR[rbp-16]
   add rsp, 40
   pop rbp
   ret
 
+getVersionL5:
+  add rdi, 1
+  jmp getVersionL4
 error:
   mov rax, 60
   mov rdi, -1
@@ -282,7 +248,7 @@ get_cached:
   syscall
 
   mov QWORD PTR [rbp-8], rax
-  mov QWORD PTR [rbp-16], rax # wont get modified, used to free at the end TODO!
+  mov QWORD PTR [rbp-16], rax # wont get modified, used to free at the end
  
   mov rax, 2 # open /proc/meminfo
   lea rdi, path
@@ -304,7 +270,7 @@ get_cached:
 
   jmp get_cachedL1
 
- get_cachedL1:
+get_cachedL1:
   xor rdx, rdx
   mov rsi, QWORD PTR[rbp-8]
   mov dl, byte[rsi]
@@ -323,21 +289,30 @@ get_cachedL2:
   jmp get_cachedL1
 
 get_cached_cont1:
-
+ 
   mov rdi, QWORD PTR[rbp-8]
   add rdi, 1
   call sti
 
   mov rdx, 1000
-  mul rdx
+  mul rdx 
+  mov QWORD PTR [rbp-8], rax
 
+  mov rax, 11
+  mov rdi, QWORD PTR [rbp-16]
+  mov rsi, 256
+  syscall
+
+  mov rax, QWORD PTR [rbp-8]
+  
+  
   add rsp, 16
   pop rbp
   ret
 
 
 
-sysinfo:
+getmem:
   push rbp
   mov rbp, rsp
 
@@ -402,3 +377,5 @@ sysinfo:
   add rsp, 128
   pop rbp
   ret
+
+
